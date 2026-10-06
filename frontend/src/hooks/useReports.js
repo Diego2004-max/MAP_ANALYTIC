@@ -1,8 +1,10 @@
 /**
  * @file useReports.js
- * @description Custom hook for fetching and managing territorial anomaly states.
+ * @description Custom hook for fetching real data from the Express backend API.
  */
 import { useState, useEffect, useCallback } from 'react';
+
+const API_BASE_URL = 'http://localhost:5000/api/v1';
 
 export const useReports = () => {
   const [reports, setReports] = useState([]);
@@ -12,25 +14,40 @@ export const useReports = () => {
   const fetchReports = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Endpoint connection simulation (Replace with fetch('http://localhost:5000/api/v1/reports'))
-      await new Promise(resolve => setTimeout(resolve, 600));
-      const mockData = [
-        { id: 1, category: 'INFRASTRUCTURE', severity: 'CRITICAL', description: 'Major structural bridge fissure reported.', status: 'PENDING', location: 'South Highway' },
-        { id: 2, category: 'ENVIRONMENTAL', severity: 'MEDIUM', description: 'Unauthorized chemical runoff near water reserve.', status: 'RESOLVED', location: 'Industrial Zone' },
-        { id: 3, category: 'SECURITY', severity: 'HIGH', description: 'Dark sector due to multiple non-functional streetlights.', status: 'PENDING', location: 'Downtown Block 3' }
-      ];
-      setReports(mockData);
+      const response = await fetch(`${API_BASE_URL}/reports`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch reports from server.');
+      }
+      const result = await response.json();
+      // Map backend fields to frontend interface if needed
+      setReports(result.data || []);
       setError(null);
     } catch (err) {
-      setError('Unable to fetch spatial anomaly data from server.');
+      setError('Unable to connect to Map Analytic backend server.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  const createReport = async (reportData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/reports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reportData),
+      });
+      if (!response.ok) throw new Error('Failed to submit report.');
+      await fetchReports(); // Refresh list after creation
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
 
-  return { reports, isLoading, error, refetch: fetchReports };
+  return { reports, isLoading, error, refetch: fetchReports, createReport };
 };
