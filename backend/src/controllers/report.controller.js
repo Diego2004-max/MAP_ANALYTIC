@@ -1,6 +1,6 @@
 /**
- * @file 
- * @description 
+ * @file report.controller.js
+ * @description Handles incoming HTTP requests for spatial anomalies, connecting NLP and PostGIS.
  */
 import { dbPool } from '../config/database.js';
 
@@ -17,15 +17,15 @@ export class ReportController {
         return res.status(400).json({ error: "Missing required fields: description, latitude, longitude." });
       }
 
-      
+      // 1. Process text through AI NLP pipeline (Gemini API)
       const nlpMetadata = await this.nlpService.classifyReport(description);
 
-      
+      // 2. Insert into PostgreSQL using PostGIS spatial functions (ST_SetSRID / ST_MakePoint)
       const query = `
         INSERT INTO anomaly_reports 
         (description, location, citizen_id, category, severity, keywords, is_actionable, status, created_at)
         VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, $5, $6, $7, $8, 'PENDING', NOW())
-        RETURNING id, description, category, severity, status, created_at;
+        RETURNING id, description, category, severity, status, keywords, is_actionable, created_at;
       `;
 
       const values = [
@@ -42,20 +42,20 @@ export class ReportController {
       const { rows } = await dbPool.query(query, values);
 
       return res.status(201).json({
-        message: "Anomaly successfully reported and analyzed.",
+        message: "Anomaly successfully reported, analyzed by AI, and stored in PostGIS.",
         data: rows[0]
       });
 
     } catch (error) {
       console.error("[ReportController] Error creating report:", error);
-      return res.status(500).json({ error: "Internal server error." });
+      return res.status(500).json({ error: "Internal server error during report processing." });
     }
   }
 
   getReports = async (req, res) => {
     try {
       const query = `
-        SELECT id, description, category, severity, status, created_at,
+        SELECT id, description, category, severity, status, keywords, is_actionable, created_at,
                ST_X(location::geometry) AS longitude, 
                ST_Y(location::geometry) AS latitude
         FROM anomaly_reports
@@ -64,7 +64,8 @@ export class ReportController {
       const { rows } = await dbPool.query(query);
       return res.status(200).json({ data: rows });
     } catch (error) {
-      return res.status(500).json({ error: "Failed to retrieve reports." });
+      console.error("[ReportController] Error fetching reports:", error);
+      return res.status(500).json({ error: "Failed to retrieve spatial reports." });
     }
   }
 }
