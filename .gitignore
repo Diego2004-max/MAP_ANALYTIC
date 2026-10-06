@@ -1,0 +1,9 @@
+# Environment variables and secrets
+.env
+backend/.env
+frontend/.env
+
+# Node modules
+node_modules/
+dist/
+build/
