@@ -1,6 +1,6 @@
 /**
  * @file report.controller.js
- * @description Handles incoming HTTP requests for spatial anomalies, connecting NLP and PostGIS.
+ * @description Handles incoming HTTP requests, connecting NLP and PostgreSQL.
  */
 import { dbPool } from '../config/database.js';
 
@@ -20,18 +20,18 @@ export class ReportController {
       // 1. Process text through AI NLP pipeline (Gemini API)
       const nlpMetadata = await this.nlpService.classifyReport(description);
 
-      // 2. Insert into PostgreSQL using PostGIS spatial functions (ST_SetSRID / ST_MakePoint)
+      // 2. Insert into PostgreSQL using standard real coordinates
       const query = `
         INSERT INTO anomaly_reports 
-        (description, location, citizen_id, category, severity, keywords, is_actionable, status, created_at)
-        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, $5, $6, $7, $8, 'PENDING', NOW())
-        RETURNING id, description, category, severity, status, keywords, is_actionable, created_at;
+        (description, latitude, longitude, citizen_id, category, severity, keywords, is_actionable, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING', NOW())
+        RETURNING id, description, category, severity, status, keywords, is_actionable, latitude, longitude, created_at;
       `;
 
       const values = [
         description,
-        longitude,
-        latitude,
+        parseFloat(latitude),
+        parseFloat(longitude),
         citizenId || 'ANONYMOUS',
         nlpMetadata.category,
         nlpMetadata.severity,
@@ -42,7 +42,7 @@ export class ReportController {
       const { rows } = await dbPool.query(query, values);
 
       return res.status(201).json({
-        message: "Anomaly successfully reported, analyzed by AI, and stored in PostGIS.",
+        message: "Anomaly successfully reported, analyzed by real AI (Gemini), and stored in PostgreSQL.",
         data: rows[0]
       });
 
@@ -55,9 +55,7 @@ export class ReportController {
   getReports = async (req, res) => {
     try {
       const query = `
-        SELECT id, description, category, severity, status, keywords, is_actionable, created_at,
-               ST_X(location::geometry) AS longitude, 
-               ST_Y(location::geometry) AS latitude
+        SELECT id, description, category, severity, status, keywords, is_actionable, latitude, longitude, created_at
         FROM anomaly_reports
         ORDER BY created_at DESC;
       `;
@@ -65,7 +63,7 @@ export class ReportController {
       return res.status(200).json({ data: rows });
     } catch (error) {
       console.error("[ReportController] Error fetching reports:", error);
-      return res.status(500).json({ error: "Failed to retrieve spatial reports." });
+      return res.status(500).json({ error: "Failed to retrieve reports." });
     }
   }
 }
